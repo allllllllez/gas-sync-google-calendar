@@ -75,7 +75,7 @@ function createCopyEvent(event, sourceId, guestId) {
     // not exist copy event, then create.
     CalendarApp.getCalendarById(sourceId).createEvent(
       COPIED_PREFIX + event.getTitle(), event.getStartTime(), event.getEndTime(),
-      {guests: guestId, description: COPIED_DESC + "\n" + event.getDescription()}
+      {guests: [guestId, sourceId].toString(), description: COPIED_DESC + "\n" + event.getDescription()}
     );
   }
 }
