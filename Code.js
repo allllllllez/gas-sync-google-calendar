@@ -12,7 +12,8 @@ var SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/foobar';
 
 // copy config
 var COPIED_PREFIX = '【△】';
-var COPIED_DESC = '【copied event】';
+var COPIED_DESC_PREFIX = '【copied event from ';
+var COPIED_DESC_SUFFIX = ']'
 
 function main(){
   var dateFrom = new Date();
@@ -32,6 +33,36 @@ function main(){
       deleteCopyEventIfOriginRemoved(event, guestId, sourceId);
     });
   });
+}
+
+function test() {
+  var dateFrom = new Date(2021, 2, 23, 10);
+  var dateTo = new Date(dateFrom.getTime() + (DAYS_TO_SYNC * 24 * 60 * 60* 1000));
+  var sourceId = CALENDAR_IDS[0][0];
+  var guestId = CALENDAR_IDS[0][1];
+  var events = CalendarApp.getCalendarById('y.nakamori@datumstudio.jp').getEvents(dateFrom, dateTo);
+  var event = events[0]
+  Logger.log(event.getTitle());
+  Logger.log(event.getGuestList().length == 1);
+  // events.forEach(function(event) {
+  //   Logger.log(event.getTitle());
+  // });
+  
+  var isInviter = event.getDescription().startsWith(COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX)
+  Logger.log('isInviterStatus: ' + isInviter)
+
+  var events = CalendarApp.getCalendarById(sourceId).getEvents(event.getStartTime(), event.getEndTime());
+  var isExist = !!events.find(element => {(
+            element.getTitle() == COPIED_PREFIX + event.getTitle() &&
+            element.getStartTime().toString() == event.getStartTime().toString() &&
+            element.getEndTime().toString() == event.getEndTime().toString())}
+            );
+  // Logger.log(events)
+  // Logger.log(events[0].getTitle() == COPIED_PREFIX + events[0].getTitle())
+  // Logger.log(events[0].getStartTime().toString() == events[0].getStartTime().toString())
+  // Logger.log(events[0].getEndTime().toString() == events[0].getEndTime().toString())
+  // Logger.log(events[0].getTitle())
+  // invite(event, guestId, sourceId);
 }
 
 function syncStatus(event, guest){
@@ -75,15 +106,19 @@ function createCopyEvent(event, sourceId, guestId) {
     // not exist copy event, then create.
     CalendarApp.getCalendarById(sourceId).createEvent(
       COPIED_PREFIX + event.getTitle(), event.getStartTime(), event.getEndTime(),
-      {guests: [guestId, sourceId].toString(), description: COPIED_DESC + "\n" + event.getDescription()}
+      {guests: [guestId, sourceId].toString(), description: COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX + "\n" + event.getDescription()}
     );
   }
 }
 
-
-
 function deleteCopyEventIfOriginRemoved(copyEvent, guestId, sourceId) {
   if (!copyEvent.getTitle().startsWith(COPIED_PREFIX)) {
+    // Skip if not event start copied_prefix
+    return true;
+  }
+  var isInviter = copyEvent.getDescription().startsWith(COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX)
+  if (!isInviter) {
+    // Skip if not copy event inviter
     return true;
   }
 
@@ -94,7 +129,7 @@ function deleteCopyEventIfOriginRemoved(copyEvent, guestId, sourceId) {
             element.getEndTime().toString() == copyEvent.getEndTime().toString()));
 
   if (!isOrgExist && copyEvent.getGuestList().length == 1 &&
-        !!copyEvent.getGuestByEmail(guestId) && copyEvent.getDescription().startsWith(COPIED_DESC)) {
+        !!copyEvent.getGuestByEmail(guestId) && copyEvent.getDescription().startsWith(COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX)) {
     copyEvent.deleteEvent();
   }
 }
