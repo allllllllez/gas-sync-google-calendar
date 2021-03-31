@@ -13,7 +13,7 @@ var SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/foobar';
 // copy config
 var COPIED_PREFIX = '【△】';
 var COPIED_DESC_PREFIX = '【copied event from ';
-var COPIED_DESC_SUFFIX = ']'
+var COPIED_DESC_SUFFIX = '】'
 
 function main(){
   var dateFrom = new Date();
@@ -30,7 +30,7 @@ function main(){
       guest ? syncStatus(event, guest) : invite(event, guestId, sourceId);
 
       // if copied original event was move, delete copy event.
-      deleteCopyEventIfOriginRemoved(event, guestId, sourceId);
+      reflectCopyEventIfOriginChanged(event, guestId, sourceId);
     });
   });
 }
@@ -111,26 +111,33 @@ function createCopyEvent(event, sourceId, guestId) {
   }
 }
 
-function deleteCopyEventIfOriginRemoved(copyEvent, guestId, sourceId) {
+function reflectCopyEventIfOriginChanged(copyEvent, guestId, sourceId) {
   if (!copyEvent.getTitle().startsWith(COPIED_PREFIX)) {
     // Skip if not event start copied_prefix
     return true;
   }
-  var isInviter = copyEvent.getDescription().startsWith(COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX)
+  var isInviter = copyEvent.getCreators().join() === sourceId;
   if (!isInviter) {
     // Skip if not copy event inviter
     return true;
   }
 
   var events = CalendarApp.getCalendarById(sourceId).getEvents(copyEvent.getStartTime(), copyEvent.getEndTime());
-  var isOrgExist = !!events.find(element => (
+  var orgEvent = events.find(element => (
             element.getTitle() == copyEvent.getTitle().slice(COPIED_PREFIX.length) &&
             element.getStartTime().toString() == copyEvent.getStartTime().toString() &&
             element.getEndTime().toString() == copyEvent.getEndTime().toString()));
 
-  if (!isOrgExist && copyEvent.getGuestList().length == 1 &&
-        !!copyEvent.getGuestByEmail(guestId) && copyEvent.getDescription().startsWith(COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX)) {
+  if(!orgEvent && copyEvent.getGuestList().length == 1 &&
+        !!copyEvent.getGuestByEmail(guestId) && copyEvent.getCreators().join() === sourceId){
+    // delete copyEvent if orginal event is deleted or moved
     copyEvent.deleteEvent();
+    return true;
+  }
+
+  if(copyEvent.getDescription() !== COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX + "\n" + orgEvent.getDescription()) {
+    // reflect copyEvent description if original event description is changed
+    copyEvent.setDescription(COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX + "\n" + orgEvent.getDescription());
   }
 }
 
