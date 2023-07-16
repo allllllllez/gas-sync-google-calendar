@@ -2,24 +2,25 @@
 // Instruction: https://github.com/soetani/gas-sync-google-calendar
 
 // 1. How many days do you want to sync your calendars?
-var DAYS_TO_SYNC = 30;
+const DAYS_TO_SYNC = 30;
 
 // 2. Calendar ID mapping: [Calendar ID (Source), Calendar ID (Guest)]
-var CALENDAR_IDS = [
+const CALENDAR_IDS = [
   ['source_01@example.com', 'guest_01@example.net'],
   ['source_02@example.com', 'guest_02@example.net']
 ];
 
+
 // 3. What is Slack webhook URL? You'll be notified when the sync is failed
-var SLACK_WEBHOOK_URL = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK_URL');
+const SLACK_WEBHOOK_URL = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK_URL');
 if (!SLACK_WEBHOOK_URL) {
   throw 'You should set "SLACK_WEBHOOK_URL" property from [File] > [Project properties] > [Script properties]';
 }
 
 // copy config
-var COPIED_PREFIX = '【△】';
-var COPIED_DESC_PREFIX = '【copied event from ';
-var COPIED_DESC_SUFFIX = '】'
+const COPIED_PREFIX = '【△】';
+const COPIED_DESC_PREFIX = '【copied event from ';
+const COPIED_DESC_SUFFIX = '】'
 
 /**
   CALENDAR_IDS に指定したカレンダー間で、イベントを同期する。
@@ -31,17 +32,17 @@ var COPIED_DESC_SUFFIX = '】'
   また、同期したスケジュールが変更されていた場合、変更を同期する
 */
 function main(){
-  var dateFrom = new Date();
-  var dateTo = new Date(dateFrom.getTime() + (DAYS_TO_SYNC * 24 * 60 * 60* 1000));
+  const dateFrom = new Date();
+  const dateTo = new Date(dateFrom.getTime() + (DAYS_TO_SYNC * 24 * 60 * 60* 1000));
   
   CALENDAR_IDS.forEach(function(ids){
-    var sourceId = ids[0];
-    var guestId = ids[1];
+    const sourceId = ids[0];
+    const guestId = ids[1];
     Logger.log('Source: ' + sourceId + ' / Guest: ' + guestId);
     
-    var events = CalendarApp.getCalendarById(sourceId).getEvents(dateFrom, dateTo);
+    const events = CalendarApp.getCalendarById(sourceId).getEvents(dateFrom, dateTo);
     events.forEach(function(event){
-      var guest = event.getGuestByEmail(guestId);
+      const guest = event.getGuestByEmail(guestId);
       guest ? syncStatus(event, guest) : invite(event, guestId, sourceId);
 
       // if copied original event was move, delete copy event.
@@ -57,8 +58,8 @@ function main(){
   @param {CalendarEventGuest} guest - スケジュール上の Guest 側ID情報
 */
 function syncStatus(event, guest){
-  var sourceStatus = event.getMyStatus();
-  var guestStatus = guest.getGuestStatus();
+  const sourceStatus = event.getMyStatus();
+  const guestStatus = guest.getGuestStatus();
   
   if (
     guestStatus != CalendarApp.GuestStatus.YES
@@ -90,7 +91,7 @@ function syncStatus(event, guest){
   @param {string} sourceId - Source 側ID
 */
 function invite(event, guestId, sourceId){
-  var result = event.addGuest(guestId);
+  const result = event.addGuest(guestId);
   Logger.log('Invited: ' + event.getTitle() + ' (' + event.getStartTime() + ')');
   if(!result.getGuestByEmail(guestId) && !event.getTitle().startsWith(COPIED_PREFIX)) {
     // invite failed, create copy event
@@ -111,8 +112,8 @@ function invite(event, guestId, sourceId){
 */
 function createCopyEvent(event, sourceId, guestId) {
   // check already copied event created
-  var events = CalendarApp.getCalendarById(sourceId).getEvents(event.getStartTime(), event.getEndTime());
-  var isExist = !!events.find(element => (
+  const events = CalendarApp.getCalendarById(sourceId).getEvents(event.getStartTime(), event.getEndTime());
+  const isExist = !!events.find(element => (
             element.getTitle() == COPIED_PREFIX + event.getTitle() &&
             element.getStartTime().toString() == event.getStartTime().toString() &&
             element.getEndTime().toString() == event.getEndTime().toString()));
@@ -139,14 +140,14 @@ function reflectCopyEventIfOriginChanged(copyEvent, guestId, sourceId) {
     // Skip if not event start copied_prefix
     return false;
   }
-  var isInviter = copyEvent.getCreators().join() === sourceId;
+  const isInviter = copyEvent.getCreators().join() === sourceId;
   if (!isInviter) {
     // Skip if not copy event inviter
     return false;
   }
   
-  var events = CalendarApp.getCalendarById(sourceId).getEvents(copyEvent.getStartTime(), copyEvent.getEndTime());
-  var orgEvent = events.find(element => (
+  const events = CalendarApp.getCalendarById(sourceId).getEvents(copyEvent.getStartTime(), copyEvent.getEndTime());
+  const orgEvent = events.find(element => (
     element.getTitle() == copyEvent.getTitle().slice(COPIED_PREFIX.length) &&
     element.getStartTime().toString() == copyEvent.getStartTime().toString() &&
     element.getEndTime().toString() == copyEvent.getEndTime().toString()));
@@ -177,8 +178,8 @@ function reflectCopyEventIfOriginChanged(copyEvent, guestId, sourceId) {
 }
 
 function notify(message){
-  var data = {'text': message};
-  var options = {
+  const data = {'text': message};
+  const options = {
     'method': 'post',
     'contentType': 'application/json',
     'payload': JSON.stringify(data)
