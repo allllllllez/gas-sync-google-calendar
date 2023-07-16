@@ -1,12 +1,15 @@
 // README
 // Instruction: https://github.com/soetani/gas-sync-google-calendar
+
 // 1. How many days do you want to sync your calendars?
 var DAYS_TO_SYNC = 30;
+
 // 2. Calendar ID mapping: [Calendar ID (Source), Calendar ID (Guest)]
 var CALENDAR_IDS = [
   ['source_01@example.com', 'guest_01@example.net'],
   ['source_02@example.com', 'guest_02@example.net']
 ];
+
 // 3. What is Slack webhook URL? You'll be notified when the sync is failed
 var SLACK_WEBHOOK_URL = PropertiesService.getScriptProperties().getProperty('SLACK_WEBHOOK_URL');
 if (!SLACK_WEBHOOK_URL) {
@@ -18,6 +21,15 @@ var COPIED_PREFIX = '【△】';
 var COPIED_DESC_PREFIX = '【copied event from ';
 var COPIED_DESC_SUFFIX = '】'
 
+/**
+  CALENDAR_IDS に指定したカレンダー間で、イベントを同期する。
+
+  Source 側カレンダーに入っているスケジュールに、、、
+  - Guest 側IDがあったら、ステータス同期させる
+  - Guest 側IDがなかったら、 Invite する（Invite出来ない場合は、スケジュールを Guest 側にコピーする）
+  
+  また、同期したスケジュールが変更されていた場合、変更を同期する
+*/
 function main(){
   var dateFrom = new Date();
   var dateTo = new Date(dateFrom.getTime() + (DAYS_TO_SYNC * 24 * 60 * 60* 1000));
@@ -38,6 +50,12 @@ function main(){
   });
 }
 
+/**
+  Source 側ステータスで Guest 側ステータスを更新する
+
+  @param {CalendarEvent} event - 同期するスケジュール
+  @param {CalendarEventGuest} guest - スケジュール上の Guest 側ID情報
+*/
 function syncStatus(event, guest){
   var sourceStatus = event.getMyStatus();
   var guestStatus = guest.getGuestStatus();
@@ -64,6 +82,13 @@ function syncStatus(event, guest){
   }
 }
 
+/**
+  Guest 側IDをスケジュールに招待する
+  
+  @param {CalendarEvent} event - 招待するスケジュール
+  @param {string} guestId - Guest 側ID
+  @param {string} sourceId - Source 側ID
+*/
 function invite(event, guestId, sourceId){
   var result = event.addGuest(guestId);
   Logger.log('Invited: ' + event.getTitle() + ' (' + event.getStartTime() + ')');
@@ -77,6 +102,13 @@ function invite(event, guestId, sourceId){
   }
 }
 
+/**
+  スケジュールをコピーして新しいイベントを作成する
+
+  @param {CalendarEvent} event - コピー元のスケジュール
+  @param {string} sourceId - Source 側ID
+  @param {string} guestId - Guest 側ID
+*/
 function createCopyEvent(event, sourceId, guestId) {
   // check already copied event created
   var events = CalendarApp.getCalendarById(sourceId).getEvents(event.getStartTime(), event.getEndTime());
@@ -93,44 +125,55 @@ function createCopyEvent(event, sourceId, guestId) {
   }
 }
 
+/**
+  元のスケジュールが変更された場合に、コピー先に変更を反映する
+
+  @param {CalendarEvent} copyEvent - 反映させるコピー先スケジュール
+  @param {string} guestId - Guest 側ID
+  @param {string} sourceId - Source 側ID
+  
+  @returns {boolean} - 反映処理が実行されたかどうか。反映したら true、していなければ false
+*/
 function reflectCopyEventIfOriginChanged(copyEvent, guestId, sourceId) {
   if (!copyEvent.getTitle().startsWith(COPIED_PREFIX)) {
     // Skip if not event start copied_prefix
-    return true;
+    return false;
   }
   var isInviter = copyEvent.getCreators().join() === sourceId;
   if (!isInviter) {
     // Skip if not copy event inviter
-    return true;
+    return false;
   }
-
+  
   var events = CalendarApp.getCalendarById(sourceId).getEvents(copyEvent.getStartTime(), copyEvent.getEndTime());
   var orgEvent = events.find(element => (
-            element.getTitle() == copyEvent.getTitle().slice(COPIED_PREFIX.length) &&
-            element.getStartTime().toString() == copyEvent.getStartTime().toString() &&
-            element.getEndTime().toString() == copyEvent.getEndTime().toString()));
+    element.getTitle() == copyEvent.getTitle().slice(COPIED_PREFIX.length) &&
+    element.getStartTime().toString() == copyEvent.getStartTime().toString() &&
+    element.getEndTime().toString() == copyEvent.getEndTime().toString()));
+    
+    if (orgEvent == undefined) {
+      // Skip if not copy event inviter
+      return false;
+    }
 
-  if (orgEvent == undefined) {
-    // Skip if not copy event inviter
-    return true;
-  }
-
-  if (!orgEvent && copyEvent.getGuestList().length == 1 &&
-        !!copyEvent.getGuestByEmail(guestId) && copyEvent.getCreators().join() === sourceId){
-    // delete copyEvent if orginal event is deleted or moved
-    copyEvent.deleteEvent();
-    return true;
-  }
-
-  if (copyEvent.getDescription() === undefined || orgEvent.getDescription() === undefined) {
-    // Skip if not copy event inviter
-    return true;
+    if (!orgEvent && copyEvent.getGuestList().length == 1 &&
+    !!copyEvent.getGuestByEmail(guestId) && copyEvent.getCreators().join() === sourceId){
+      // delete copyEvent if orginal event is deleted or moved
+      copyEvent.deleteEvent();
+      return false;
+    }
+    
+    if (copyEvent.getDescription() === undefined || orgEvent.getDescription() === undefined) {
+      // Skip if not copy event inviter
+    return false;
   }
 
   if (copyEvent.getDescription() !== COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX + "\n" + orgEvent.getDescription()) {
     // reflect copyEvent description if original event description is changed
     copyEvent.setDescription(COPIED_DESC_PREFIX + sourceId + COPIED_DESC_SUFFIX + "\n" + orgEvent.getDescription());
   }
+
+  return true;
 }
 
 function notify(message){
